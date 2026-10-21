@@ -1,0 +1,1247 @@
+diff --git a/cmd/evolution-go/main.go b/cmd/evolution-go/main.go
+index 5234583..7ca5055 100644
+--- a/cmd/evolution-go/main.go
++++ b/cmd/evolution-go/main.go
+@@ -1,6 +1,7 @@
+ package main
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"database/sql"
+ 	"flag"
+@@ -83,8 +84,8 @@ func init() {
+ }
+ 
+ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.Config, conn *amqp.Connection, exPath string, runtimeCtx *core.RuntimeContext) *gin.Engine {
+-	killChannel := make(map[string](chan bool))
+-	clientPointer := make(map[string]*whatsmeow.Client)
++	killChannel := safemap.New[chan bool]()
++	clientPointer := safemap.New[*whatsmeow.Client]()
+ 
+ 	loggerWrapper := logger_wrapper.NewLoggerManager(config)
+ 
+diff --git a/pkg/call/service/call_service.go b/pkg/call/service/call_service.go
+index 3c14a94..c62258d 100644
+--- a/pkg/call/service/call_service.go
++++ b/pkg/call/service/call_service.go
+@@ -1,6 +1,7 @@
+ package call_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"errors"
+ 	"time"
+@@ -18,7 +19,7 @@ type CallService interface {
+ }
+ 
+ type callService struct {
+-	clientPointer    map[string]*whatsmeow.Client
++	clientPointer    *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService whatsmeow_service.WhatsmeowService
+ 	loggerWrapper    *logger_wrapper.LoggerManager
+ }
+@@ -29,7 +30,7 @@ type RejectCallStruct struct {
+ }
+ 
+ func (c *callService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := c.clientPointer[instanceId]
++	client := c.clientPointer.Get(instanceId)
+ 	c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -43,7 +44,7 @@ func (c *callService) ensureClientConnected(instanceId string) (*whatsmeow.Clien
+ 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = c.clientPointer[instanceId]
++		client = c.clientPointer.Get(instanceId)
+ 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -83,7 +84,7 @@ func (c *callService) RejectCall(data *RejectCallStruct, instance *instance_mode
+ }
+ 
+ func NewCallService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+ ) CallService {
+diff --git a/pkg/chat/service/chat_service.go b/pkg/chat/service/chat_service.go
+index c4eda9d..26e0f2b 100644
+--- a/pkg/chat/service/chat_service.go
++++ b/pkg/chat/service/chat_service.go
+@@ -1,6 +1,7 @@
+ package chat_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"errors"
+ 	"time"
+@@ -25,7 +26,7 @@ type ChatService interface {
+ }
+ 
+ type chatService struct {
+-	clientPointer    map[string]*whatsmeow.Client
++	clientPointer    *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService whatsmeow_service.WhatsmeowService
+ 	loggerWrapper    *logger_wrapper.LoggerManager
+ }
+@@ -40,7 +41,7 @@ type HistorySyncRequestStruct struct {
+ }
+ 
+ func (c *chatService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := c.clientPointer[instanceId]
++	client := c.clientPointer.Get(instanceId)
+ 	c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -54,7 +55,7 @@ func (c *chatService) ensureClientConnected(instanceId string) (*whatsmeow.Clien
+ 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = c.clientPointer[instanceId]
++		client = c.clientPointer.Get(instanceId)
+ 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -244,7 +245,7 @@ func (c *chatService) HistorySyncRequest(data *HistorySyncRequestStruct, instanc
+ }
+ 
+ func NewChatService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+ ) ChatService {
+diff --git a/pkg/community/service/community_service.go b/pkg/community/service/community_service.go
+index aded610..8aa0597 100644
+--- a/pkg/community/service/community_service.go
++++ b/pkg/community/service/community_service.go
+@@ -1,6 +1,7 @@
+ package community_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"errors"
+ 	"time"
+@@ -21,7 +22,7 @@ type CommunityService interface {
+ }
+ 
+ type communityService struct {
+-	clientPointer    map[string]*whatsmeow.Client
++	clientPointer    *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService whatsmeow_service.WhatsmeowService
+ 	loggerWrapper    *logger_wrapper.LoggerManager
+ }
+@@ -36,7 +37,7 @@ type AddParticipantStruct struct {
+ }
+ 
+ func (c *communityService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := c.clientPointer[instanceId]
++	client := c.clientPointer.Get(instanceId)
+ 	c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -50,7 +51,7 @@ func (c *communityService) ensureClientConnected(instanceId string) (*whatsmeow.
+ 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = c.clientPointer[instanceId]
++		client = c.clientPointer.Get(instanceId)
+ 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -157,7 +158,7 @@ func (c *communityService) CommunityRemove(data *AddParticipantStruct, instance
+ }
+ 
+ func NewCommunityService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+ ) CommunityService {
+diff --git a/pkg/group/service/group_service.go b/pkg/group/service/group_service.go
+index b99e10b..04fbc0a 100644
+--- a/pkg/group/service/group_service.go
++++ b/pkg/group/service/group_service.go
+@@ -1,6 +1,7 @@
+ package group_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"errors"
+ 	"fmt"
+@@ -37,7 +38,7 @@ type GroupService interface {
+ }
+ 
+ type groupService struct {
+-	clientPointer    map[string]*whatsmeow.Client
++	clientPointer    *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService whatsmeow_service.WhatsmeowService
+ 	loggerWrapper    *logger_wrapper.LoggerManager
+ }
+@@ -117,7 +118,7 @@ type UpdateGroupRequestParticipantsStruct struct {
+ }
+ 
+ func (g *groupService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := g.clientPointer[instanceId]
++	client := g.clientPointer.Get(instanceId)
+ 	g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -131,7 +132,7 @@ func (g *groupService) ensureClientConnected(instanceId string) (*whatsmeow.Clie
+ 		g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = g.clientPointer[instanceId]
++		client = g.clientPointer.Get(instanceId)
+ 		g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -641,7 +642,7 @@ func (g *groupService) UpdateGroupRequestParticipants(data *UpdateGroupRequestPa
+ }
+ 
+ func NewGroupService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+ ) GroupService {
+diff --git a/pkg/instance/service/instance_service.go b/pkg/instance/service/instance_service.go
+index fa43c94..aad0a53 100644
+--- a/pkg/instance/service/instance_service.go
++++ b/pkg/instance/service/instance_service.go
+@@ -1,6 +1,7 @@
+ package instance_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"bufio"
+ 	"context"
+ 	"encoding/base64"
+@@ -50,8 +51,8 @@ type InstanceService interface {
+ type instances struct {
+ 	instanceRepository instance_repository.InstanceRepository
+ 	config             *config.Config
+-	killChannel        map[string](chan bool)
+-	clientPointer      map[string]*whatsmeow.Client
++	killChannel        *safemap.Map[chan bool]
++	clientPointer      *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService   whatsmeow_service.WhatsmeowService
+ 	loggerWrapper      *logger_wrapper.LoggerManager
+ }
+@@ -124,7 +125,7 @@ type ForceReconnectStruct struct {
+ 
+ func (i *instances) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+ 	logger := i.loggerWrapper.GetLogger(instanceId)
+-	client := i.clientPointer[instanceId]
++	client := i.clientPointer.Get(instanceId)
+ 	logger.LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -138,7 +139,7 @@ func (i *instances) ensureClientConnected(instanceId string) (*whatsmeow.Client,
+ 		logger.LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = i.clientPointer[instanceId]
++		client = i.clientPointer.Get(instanceId)
+ 		logger.LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -242,7 +243,7 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
+ 	}
+ 
+ 	// Verifica se a instância já está rodando
+-	isInstanceRunning := i.clientPointer[instance.Id] != nil
++	isInstanceRunning := i.clientPointer.Get(instance.Id) != nil
+ 
+ 	// Sincroniza as configurações na instância em execução (se já estiver conectada)
+ 	err = i.whatsmeowService.UpdateInstanceSettings(instance.Id)
+@@ -258,7 +259,7 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
+ 	if !isInstanceRunning {
+ 		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Starting new client instance", instance.Id)
+ 
+-		i.killChannel[instance.Id] = make(chan bool)
++		i.killChannel.Set(instance.Id, make(chan bool))
+ 
+ 		clientData := &whatsmeow_service.ClientData{
+ 			Instance:      instance,
+@@ -288,8 +289,8 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
+ 	// logger.LogInfo("Waiting 1 seconds")
+ 	// time.Sleep(1000 * time.Millisecond)
+ 
+-	// if i.clientPointer[instance.Id] != nil {
+-	// 	if !i.clientPointer[instance.Id].IsConnected() {
++	// if i.clientPointer.Get(instance.Id) != nil {
++	// 	if !i.clientPointer.Get(instance.Id).IsConnected() {
+ 	// 		return instance, "", "", fmt.Errorf("failed to connect")
+ 	// 	}
+ 	// } else {
+@@ -317,7 +318,7 @@ func (i instances) Disconnect(instance *instance_model.Instance) (*instance_mode
+ 	if client.IsConnected() {
+ 		if client.IsLoggedIn() {
+ 			i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Disconnection successful", instance.Id)
+-			i.killChannel[instance.Id] <- true
++			i.killChannel.Get(instance.Id) <- true
+ 
+ 			instance.Events = ""
+ 
+@@ -353,12 +354,12 @@ func (i instances) Logout(instance *instance_model.Instance) (*instance_model.In
+ 		}
+ 
+ 		select {
+-		case i.killChannel[instance.Id] <- true:
++		case i.killChannel.Get(instance.Id) <- true:
+ 		case <-time.After(5 * time.Second):
+ 		}
+ 
+-		delete(i.clientPointer, instance.Id)
+-		delete(i.killChannel, instance.Id)
++		i.clientPointer.Delete(instance.Id)
++		i.killChannel.Delete(instance.Id)
+ 
+ 		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Logout successful", instance.Id)
+ 		return instance, nil
+@@ -368,12 +369,12 @@ func (i instances) Logout(instance *instance_model.Instance) (*instance_model.In
+ 		client.Disconnect()
+ 
+ 		select {
+-		case i.killChannel[instance.Id] <- true:
++		case i.killChannel.Get(instance.Id) <- true:
+ 		case <-time.After(5 * time.Second):
+ 		}
+ 
+-		delete(i.clientPointer, instance.Id)
+-		delete(i.killChannel, instance.Id)
++		i.clientPointer.Delete(instance.Id)
++		i.killChannel.Delete(instance.Id)
+ 
+ 		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Disconnection successful", instance.Id)
+ 		return instance, nil
+@@ -384,7 +385,7 @@ func (i instances) Logout(instance *instance_model.Instance) (*instance_model.In
+ }
+ 
+ func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, error) {
+-	client := i.clientPointer[instance.Id]
++	client := i.clientPointer.Get(instance.Id)
+ 
+ 	if client == nil {
+ 		return &StatusStruct{
+@@ -413,7 +414,7 @@ func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, err
+ 
+ func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, error) {
+ 	logger := i.loggerWrapper.GetLogger(instance.Id)
+-	client := i.clientPointer[instance.Id]
++	client := i.clientPointer.Get(instance.Id)
+ 
+ 	// Se não há cliente ou o cliente está logado, precisamos iniciar um novo cliente
+ 	if client == nil || client.IsLoggedIn() {
+@@ -435,7 +436,7 @@ func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, erro
+ 		time.Sleep(3 * time.Second)
+ 
+ 		// Verificar novamente se há cliente
+-		client = i.clientPointer[instance.Id]
++		client = i.clientPointer.Get(instance.Id)
+ 		if client != nil && client.IsLoggedIn() {
+ 			return nil, fmt.Errorf("session already logged in")
+ 		}
+@@ -511,7 +512,7 @@ func buildPasskeyOpenURL(token string) string {
+ 
+ func (i instances) Pair(data *PairStruct, instance *instance_model.Instance) (*PairReturnStruct, error) {
+ 	logger := i.loggerWrapper.GetLogger(instance.Id)
+-	client := i.clientPointer[instance.Id]
++	client := i.clientPointer.Get(instance.Id)
+ 
+ 	if client == nil || !client.IsConnected() {
+ 		if client != nil && client.IsLoggedIn() {
+@@ -525,7 +526,7 @@ func (i instances) Pair(data *PairStruct, instance *instance_model.Instance) (*P
+ 		// Wait for the WA websocket connection and initial QR generation to establish.
+ 		// PairPhone must be called after the QR event is received per whatsmeow docs.
+ 		time.Sleep(3 * time.Second)
+-		client = i.clientPointer[instance.Id]
++		client = i.clientPointer.Get(instance.Id)
+ 		if client == nil {
+ 			return nil, fmt.Errorf("failed to initialize client for pairing")
+ 		}
+@@ -551,7 +552,7 @@ func (i instances) GetAll() ([]*instance_model.Instance, error) {
+ 	}
+ 
+ 	for _, instance := range instances {
+-		if client := i.clientPointer[instance.Id]; client != nil {
++		if client := i.clientPointer.Get(instance.Id); client != nil {
+ 			instance.Connected = client.IsLoggedIn()
+ 		} else {
+ 			instance.Connected = false
+@@ -570,7 +571,7 @@ func (i instances) Info(instanceId string) (*instance_model.Instance, error) {
+ 	}
+ 
+ 	// Atualiza o status connected com base no estado real do cliente
+-	if client := i.clientPointer[instance.Id]; client != nil {
++	if client := i.clientPointer.Get(instance.Id); client != nil {
+ 		instance.Connected = client.IsLoggedIn()
+ 	} else {
+ 		instance.Connected = false
+@@ -587,18 +588,18 @@ func (i instances) Delete(id string) error {
+ 		return err
+ 	}
+ 
+-	if i.clientPointer[instance.Id] != nil && i.clientPointer[instance.Id].IsConnected() {
+-		if i.clientPointer[instance.Id].IsLoggedIn() {
+-			i.clientPointer[instance.Id].Logout(context.Background())
++	if i.clientPointer.Get(instance.Id) != nil && i.clientPointer.Get(instance.Id).IsConnected() {
++		if i.clientPointer.Get(instance.Id).IsLoggedIn() {
++			i.clientPointer.Get(instance.Id).Logout(context.Background())
+ 		}
+-		i.clientPointer[instance.Id].Disconnect()
++		i.clientPointer.Get(instance.Id).Disconnect()
+ 	}
+ 
+ 	// Limpar todos os recursos da instância antes de deletar
+-	delete(i.clientPointer, instance.Id)
+-	if i.killChannel[instance.Id] != nil {
+-		close(i.killChannel[instance.Id])
+-		delete(i.killChannel, instance.Id)
++	i.clientPointer.Delete(instance.Id)
++	if i.killChannel.Get(instance.Id) != nil {
++		close(i.killChannel.Get(instance.Id))
++		i.killChannel.Delete(instance.Id)
+ 	}
+ 
+ 	// Limpar cache via whatsmeow service
+@@ -697,7 +698,7 @@ func (i instances) RemoveProxy(id string) error {
+ }
+ 
+ func (i instances) ForceReconnect(instanceId string, number string) error {
+-	if i.clientPointer[instanceId].IsConnected() && i.clientPointer[instanceId].IsLoggedIn() {
++	if i.clientPointer.Get(instanceId).IsConnected() && i.clientPointer.Get(instanceId).IsLoggedIn() {
+ 		return fmt.Errorf("client already connected")
+ 	}
+ 
+@@ -713,7 +714,7 @@ func (i instances) ForceReconnect(instanceId string, number string) error {
+ 
+ 	subscribedEvents := strings.Split(instance.Events, ",")
+ 
+-	i.killChannel[instance.Id] = make(chan bool)
++	i.killChannel.Set(instance.Id, make(chan bool))
+ 
+ 	clientData := &whatsmeow_service.ClientData{
+ 		Instance:      instance,
+@@ -735,29 +736,29 @@ func (i instances) ForceReconnect(instanceId string, number string) error {
+ 		}
+ 	}
+ 
+-	if i.clientPointer[instance.Id] != nil {
+-		client := i.clientPointer[instance.Id]
++	if i.clientPointer.Get(instance.Id) != nil {
++		client := i.clientPointer.Get(instance.Id)
+ 		client.Disconnect()
+ 
+ 		select {
+-		case i.killChannel[instance.Id] <- true:
++		case i.killChannel.Get(instance.Id) <- true:
+ 		case <-time.After(5 * time.Second):
+ 		}
+ 
+-		delete(i.clientPointer, instance.Id)
+-		delete(i.killChannel, instance.Id)
++		i.clientPointer.Delete(instance.Id)
++		i.killChannel.Delete(instance.Id)
+ 	}
+ 
+ 	go i.whatsmeowService.StartClient(clientData)
+ 
+ 	time.Sleep(2 * time.Second)
+ 
+-	if i.clientPointer[instance.Id] != nil {
+-		if !i.clientPointer[instance.Id].IsConnected() {
++	if i.clientPointer.Get(instance.Id) != nil {
++		if !i.clientPointer.Get(instance.Id).IsConnected() {
+ 			return fmt.Errorf("failed to connect")
+ 		}
+ 
+-		if !i.clientPointer[instance.Id].IsLoggedIn() {
++		if !i.clientPointer.Get(instance.Id).IsLoggedIn() {
+ 			return fmt.Errorf("failed to login")
+ 		}
+ 	} else {
+@@ -912,8 +913,8 @@ func (i instances) UpdateAdvancedSettings(instanceId string, settings *instance_
+ 
+ func NewInstanceService(
+ 	instanceRepository instance_repository.InstanceRepository,
+-	killChannel map[string](chan bool),
+-	clientPointer map[string]*whatsmeow.Client,
++	killChannel *safemap.Map[chan bool],
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	config *config.Config,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+diff --git a/pkg/label/service/label_service.go b/pkg/label/service/label_service.go
+index b0a9070..ee34e54 100644
+--- a/pkg/label/service/label_service.go
++++ b/pkg/label/service/label_service.go
+@@ -1,6 +1,7 @@
+ package label_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"errors"
+ 	"time"
+@@ -25,7 +26,7 @@ type LabelService interface {
+ }
+ 
+ type labelService struct {
+-	clientPointer    map[string]*whatsmeow.Client
++	clientPointer    *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService whatsmeow_service.WhatsmeowService
+ 	labelRepository  label_repository.LabelRepository
+ 	loggerWrapper    *logger_wrapper.LoggerManager
+@@ -50,7 +51,7 @@ type EditLabelStruct struct {
+ }
+ 
+ func (l *labelService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := l.clientPointer[instanceId]
++	client := l.clientPointer.Get(instanceId)
+ 	l.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -64,7 +65,7 @@ func (l *labelService) ensureClientConnected(instanceId string) (*whatsmeow.Clie
+ 		l.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = l.clientPointer[instanceId]
++		client = l.clientPointer.Get(instanceId)
+ 		l.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -226,7 +227,7 @@ func (l *labelService) GetLabels(instance *instance_model.Instance) ([]label_mod
+ }
+ 
+ func NewLabelService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	labelRepository label_repository.LabelRepository,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+diff --git a/pkg/message/service/message_service.go b/pkg/message/service/message_service.go
+index f8f1392..f283692 100644
+--- a/pkg/message/service/message_service.go
++++ b/pkg/message/service/message_service.go
+@@ -1,6 +1,7 @@
+ package message_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"errors"
+ 	"fmt"
+@@ -35,7 +36,7 @@ type MessageService interface {
+ }
+ 
+ type messageService struct {
+-	clientPointer     map[string]*whatsmeow.Client
++	clientPointer     *safemap.Map[*whatsmeow.Client]
+ 	messageRepository message_repository.MessageRepository
+ 	whatsmeowService  whatsmeow_service.WhatsmeowService
+ 	loggerWrapper     *logger_wrapper.LoggerManager
+@@ -95,7 +96,7 @@ type MessageSendStruct struct {
+ }
+ 
+ func (m *messageService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := m.clientPointer[instanceId]
++	client := m.clientPointer.Get(instanceId)
+ 	m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -109,7 +110,7 @@ func (m *messageService) ensureClientConnected(instanceId string) (*whatsmeow.Cl
+ 		m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = m.clientPointer[instanceId]
++		client = m.clientPointer.Get(instanceId)
+ 		m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -526,7 +527,7 @@ func (m *messageService) EditMessage(data *EditMessageStruct, instance *instance
+ }
+ 
+ func NewMessageService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	messageRepository message_repository.MessageRepository,
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+diff --git a/pkg/newsletter/service/newsletter_service.go b/pkg/newsletter/service/newsletter_service.go
+index 6a8f677..f1a91a1 100644
+--- a/pkg/newsletter/service/newsletter_service.go
++++ b/pkg/newsletter/service/newsletter_service.go
+@@ -1,6 +1,7 @@
+ package newsletter_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"errors"
+ 	"time"
+@@ -22,7 +23,7 @@ type NewsletterService interface {
+ }
+ 
+ type newsletterService struct {
+-	clientPointer    map[string]*whatsmeow.Client
++	clientPointer    *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService whatsmeow_service.WhatsmeowService
+ 	loggerWrapper    *logger_wrapper.LoggerManager
+ }
+@@ -47,7 +48,7 @@ type GetNewsletterMessagesStruct struct {
+ }
+ 
+ func (n *newsletterService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := n.clientPointer[instanceId]
++	client := n.clientPointer.Get(instanceId)
+ 	n.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -61,7 +62,7 @@ func (n *newsletterService) ensureClientConnected(instanceId string) (*whatsmeow
+ 		n.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = n.clientPointer[instanceId]
++		client = n.clientPointer.Get(instanceId)
+ 		n.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -195,7 +196,7 @@ func (n *newsletterService) GetNewsletterMessages(data *GetNewsletterMessagesStr
+ }
+ 
+ func NewNewsletterService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+ ) NewsletterService {
+diff --git a/pkg/safemap/safemap.go b/pkg/safemap/safemap.go
+new file mode 100644
+index 0000000..7920999
+--- /dev/null
++++ b/pkg/safemap/safemap.go
+@@ -0,0 +1,99 @@
++// Package safemap holds the process-wide maps that are shared across goroutines.
++//
++// WHY THIS EXISTS
++//
++// The three state maps of the process (clientPointer, myClientPointer and
++// killChannel) are created once at startup and passed BY REFERENCE into eleven
++// packages. Every one of them read and wrote those maps directly, from different
++// goroutines, with no synchronisation at all.
++//
++// Go does not tolerate that. Concurrent writes do not corrupt silently: the
++// runtime kills the process with
++//
++//	fatal error: concurrent map writes
++//
++// and a fatal error is NOT recoverable — a deferred recover() does not catch it.
++//
++// Measured in production: a process died at StartClient while five instances
++// were connecting at the same time. The container orchestrator brought it back
++// within seconds, but every number was offline in the meantime, and it repeats
++// on every restart that brings up more than a couple of instances at once.
++//
++// WHY A SEPARATE PACKAGE, AND WHY GENERICS
++//
++// MyClient lives in pkg/whatsmeow/service. If the safe type lived there, the
++// other ten packages would have to import that package and an import cycle
++// would appear. This package has no internal dependencies — only the standard
++// library — so anything can use it.
++package safemap
++
++import "sync"
++
++// Map is a map[string]T guarded by a read/write mutex.
++//
++// Always use the pointer (*Map[T]): copying the struct would copy the mutex,
++// and a copied mutex stops protecting the original — two owners, one lock each,
++// and the race comes back silently.
++type Map[T any] struct {
++	mu sync.RWMutex
++	m  map[string]T
++}
++
++// New returns an empty map, ready to use.
++func New[T any]() *Map[T] {
++	return &Map[T]{m: make(map[string]T)}
++}
++
++// Get returns the value, or the zero value of T when the key is absent —
++// exactly like the m[k] it replaces, so swapping call sites changes no
++// behaviour.
++func (s *Map[T]) Get(k string) T {
++	s.mu.RLock()
++	defer s.mu.RUnlock()
++	return s.m[k]
++}
++
++// Lookup is the v, ok := m[k] form.
++func (s *Map[T]) Lookup(k string) (T, bool) {
++	s.mu.RLock()
++	defer s.mu.RUnlock()
++	v, ok := s.m[k]
++	return v, ok
++}
++
++// Set is the m[k] = v form.
++func (s *Map[T]) Set(k string, v T) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.m[k] = v
++}
++
++// Delete is the delete(m, k) form.
++func (s *Map[T]) Delete(k string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	delete(s.m, k)
++}
++
++// Len is the len(m) form.
++func (s *Map[T]) Len() int {
++	s.mu.RLock()
++	defer s.mu.RUnlock()
++	return len(s.m)
++}
++
++// Snapshot returns a copy for range loops.
++//
++// Ranging over the map from the inside would hold the lock for the whole loop,
++// and the loop bodies here talk to WhatsApp — the lock would be held across
++// network calls. The snapshot costs one copy of the pointers and releases the
++// lock immediately.
++func (s *Map[T]) Snapshot() map[string]T {
++	s.mu.RLock()
++	defer s.mu.RUnlock()
++	out := make(map[string]T, len(s.m))
++	for k, v := range s.m {
++		out[k] = v
++	}
++	return out
++}
+diff --git a/pkg/safemap/safemap_test.go b/pkg/safemap/safemap_test.go
+new file mode 100644
+index 0000000..4646bb7
+--- /dev/null
++++ b/pkg/safemap/safemap_test.go
+@@ -0,0 +1,71 @@
++package safemap
++
++import (
++	"sync"
++	"testing"
++)
++
++// TestPlainMapRaces is the calibration test: it proves the detector can see the
++// bug in the first place.
++//
++// It drives a plain Go map the way this code used to — N goroutines writing the
++// same key. Under -race the detector flags it. Without -race the runtime kills
++// the process with "fatal error: concurrent map writes", which is exactly the
++// failure this package exists to prevent.
++//
++// Skipped by default precisely because that failure is not recoverable and
++// would take the whole suite down. Run it on purpose to confirm the detector is
++// not blind:
++//
++//	go test -race -run TestPlainMapRaces ./pkg/safemap/
++func TestPlainMapRaces(t *testing.T) {
++	t.Skip("calibration: run by hand — see the comment above")
++
++	m := map[string]int{}
++	var wg sync.WaitGroup
++	for i := 0; i < 50; i++ {
++		wg.Add(1)
++		go func(n int) {
++			defer wg.Done()
++			m["key"] = n // <- the race
++		}(i)
++	}
++	wg.Wait()
++}
++
++// TestConcurrentAccess runs the same exercise through the guarded map: fifty
++// goroutines writing, reading and ranging over the same key at once — the shape
++// of a startup where several instances connect simultaneously.
++func TestConcurrentAccess(t *testing.T) {
++	m := New[int]()
++	var wg sync.WaitGroup
++	for i := 0; i < 50; i++ {
++		wg.Add(3)
++		go func(n int) { defer wg.Done(); m.Set("key", n) }(i)
++		go func() { defer wg.Done(); _ = m.Get("key") }()
++		go func() {
++			defer wg.Done()
++			_, _ = m.Lookup("key")
++			_ = m.Len()
++			for range m.Snapshot() {
++			}
++		}()
++	}
++	wg.Wait()
++
++	if _, ok := m.Lookup("key"); !ok {
++		t.Fatal("key should still be in the map")
++	}
++}
++
++// TestGetMissingKeyReturnsZero pins the behaviour the call sites relied on:
++// m[k] on an absent key yields the zero value, and Get must do the same —
++// otherwise swapping the call sites would have changed logic silently.
++func TestGetMissingKeyReturnsZero(t *testing.T) {
++	if v := New[*int]().Get("absent"); v != nil {
++		t.Fatalf("want nil, got %v", v)
++	}
++	if n := New[int]().Get("absent"); n != 0 {
++		t.Fatalf("want 0, got %d", n)
++	}
++}
+diff --git a/pkg/sendMessage/service/send_service.go b/pkg/sendMessage/service/send_service.go
+index b885008..eda305e 100644
+--- a/pkg/sendMessage/service/send_service.go
++++ b/pkg/sendMessage/service/send_service.go
+@@ -1,6 +1,7 @@
+ package send_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"bytes"
+ 	"context"
+ 	crypto_rand "crypto/rand"
+@@ -53,7 +54,7 @@ type SendService interface {
+ }
+ 
+ type sendService struct {
+-	clientPointer    map[string]*whatsmeow.Client
++	clientPointer    *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService whatsmeow_service.WhatsmeowService
+ 	config           *config.Config
+ 	loggerWrapper    *logger_wrapper.LoggerManager
+@@ -380,7 +381,7 @@ type MessageSendStruct struct {
+ }
+ 
+ func (s *sendService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := s.clientPointer[instanceId]
++	client := s.clientPointer.Get(instanceId)
+ 	s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -394,7 +395,7 @@ func (s *sendService) ensureClientConnected(instanceId string) (*whatsmeow.Clien
+ 		s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = s.clientPointer[instanceId]
++		client = s.clientPointer.Get(instanceId)
+ 		s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -2360,7 +2361,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
+ 
+ 	var message string
+ 	if data.Id == "" {
+-		message = s.clientPointer[instance.Id].GenerateMessageID()
++		message = s.clientPointer.Get(instance.Id).GenerateMessageID()
+ 	} else {
+ 		message = data.Id
+ 	}
+@@ -2371,14 +2372,14 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
+ 			media = "audio"
+ 		}
+ 
+-		err := s.clientPointer[instance.Id].SendChatPresence(context.Background(), recipient, types.ChatPresence("composing"), types.ChatPresenceMedia(media))
++		err := s.clientPointer.Get(instance.Id).SendChatPresence(context.Background(), recipient, types.ChatPresence("composing"), types.ChatPresenceMedia(media))
+ 		if err != nil {
+ 			return nil, err
+ 		}
+ 
+ 		time.Sleep(time.Duration(data.Delay) * time.Millisecond)
+ 
+-		err = s.clientPointer[instance.Id].SendChatPresence(context.Background(), recipient, types.ChatPresence("paused"), types.ChatPresenceMedia(media))
++		err = s.clientPointer.Get(instance.Id).SendChatPresence(context.Background(), recipient, types.ChatPresence("paused"), types.ChatPresenceMedia(media))
+ 		if err != nil {
+ 			return nil, err
+ 		}
+@@ -2631,7 +2632,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
+ 	// Only try to get participants for actual groups, not newsletters
+ 	if isGroup && !isNewsletter {
+ 		if data.MentionAll {
+-			groupInfo, err := s.clientPointer[instance.Id].GetGroupInfo(context.Background(), recipient)
++			groupInfo, err := s.clientPointer.Get(instance.Id).GetGroupInfo(context.Background(), recipient)
+ 			if err != nil {
+ 				return nil, err
+ 			}
+@@ -2770,7 +2771,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
+ 		sendExtra.AdditionalNodes = data.AdditionalNodes
+ 	}
+ 
+-	response, err := s.clientPointer[instance.Id].SendMessage(context.Background(), recipient, msg, sendExtra)
++	response, err := s.clientPointer.Get(instance.Id).SendMessage(context.Background(), recipient, msg, sendExtra)
+ 	if err != nil {
+ 		s.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error sending message: %v", instance.Id, err)
+ 		return nil, err
+@@ -2781,7 +2782,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
+ 	messageInfo := types.MessageInfo{
+ 		MessageSource: types.MessageSource{
+ 			Chat:     recipient,
+-			Sender:   *s.clientPointer[instance.Id].Store.ID,
++			Sender:   *s.clientPointer.Get(instance.Id).Store.ID,
+ 			IsFromMe: true,
+ 			IsGroup:  isGroup,
+ 		},
+@@ -2835,15 +2836,15 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
+ 		sticker := msg.GetStickerMessage()
+ 
+ 		if img != nil {
+-			data, err = s.clientPointer[instance.Id].Download(context.Background(), img)
++			data, err = s.clientPointer.Get(instance.Id).Download(context.Background(), img)
+ 		} else if audio != nil {
+-			data, err = s.clientPointer[instance.Id].Download(context.Background(), audio)
++			data, err = s.clientPointer.Get(instance.Id).Download(context.Background(), audio)
+ 		} else if document != nil {
+-			data, err = s.clientPointer[instance.Id].Download(context.Background(), document)
++			data, err = s.clientPointer.Get(instance.Id).Download(context.Background(), document)
+ 		} else if video != nil {
+-			data, err = s.clientPointer[instance.Id].Download(context.Background(), video)
++			data, err = s.clientPointer.Get(instance.Id).Download(context.Background(), video)
+ 		} else if sticker != nil {
+-			data, err = s.clientPointer[instance.Id].Download(context.Background(), sticker)
++			data, err = s.clientPointer.Get(instance.Id).Download(context.Background(), sticker)
+ 
+ 			webpReader := bytes.NewReader(data)
+ 			img, err := webp.Decode(webpReader)
+@@ -3366,7 +3367,7 @@ func (s *sendService) sendStatusWebhook(messageSent *MessageSendStruct, instance
+ }
+ 
+ func NewSendService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	config *config.Config,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+diff --git a/pkg/user/service/user_service.go b/pkg/user/service/user_service.go
+index f301160..f9a3ce2 100644
+--- a/pkg/user/service/user_service.go
++++ b/pkg/user/service/user_service.go
+@@ -1,6 +1,7 @@
+ package user_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"context"
+ 	"errors"
+ 	"fmt"
+@@ -33,7 +34,7 @@ type UserService interface {
+ }
+ 
+ type userService struct {
+-	clientPointer    map[string]*whatsmeow.Client
++	clientPointer    *safemap.Map[*whatsmeow.Client]
+ 	whatsmeowService whatsmeow_service.WhatsmeowService
+ 	loggerWrapper    *logger_wrapper.LoggerManager
+ }
+@@ -109,7 +110,7 @@ type PrivacyStruct struct {
+ }
+ 
+ func (u *userService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+-	client := u.clientPointer[instanceId]
++	client := u.clientPointer.Get(instanceId)
+ 	u.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
+ 
+ 	if client == nil {
+@@ -123,7 +124,7 @@ func (u *userService) ensureClientConnected(instanceId string) (*whatsmeow.Clien
+ 		u.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
+ 		time.Sleep(2 * time.Second)
+ 
+-		client = u.clientPointer[instanceId]
++		client = u.clientPointer.Get(instanceId)
+ 		u.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
+ 			instanceId,
+ 			client != nil,
+@@ -541,7 +542,7 @@ func (u *userService) SetProfileStatus(data *SetProfileStatusStruct, instance *i
+ }
+ 
+ func NewUserService(
+-	clientPointer map[string]*whatsmeow.Client,
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	whatsmeowService whatsmeow_service.WhatsmeowService,
+ 	loggerWrapper *logger_wrapper.LoggerManager,
+ ) UserService {
+diff --git a/pkg/whatsmeow/service/whatsmeow.go b/pkg/whatsmeow/service/whatsmeow.go
+index eda5646..d2d67e2 100644
+--- a/pkg/whatsmeow/service/whatsmeow.go
++++ b/pkg/whatsmeow/service/whatsmeow.go
+@@ -1,6 +1,7 @@
+ package whatsmeow_service
+ 
+ import (
++	"github.com/evolution-foundation/evolution-go/pkg/safemap"
+ 	"bytes"
+ 	"context"
+ 	"database/sql"
+@@ -83,10 +84,10 @@ type whatsmeowService struct {
+ 	labelRepository    label_repository.LabelRepository
+ 	pollService        poll_service.PollService // NOVO: Serviço de enquetes
+ 	config             *config.Config
+-	killChannel        map[string](chan bool)
++	killChannel        *safemap.Map[chan bool]
+ 	userInfoCache      *cache.Cache
+-	clientPointer      map[string]*whatsmeow.Client
+-	myClientPointer    map[string]*MyClient
++	clientPointer      *safemap.Map[*whatsmeow.Client]
++	myClientPointer    *safemap.Map[*MyClient]
+ 	rabbitmqProducer   producer_interfaces.Producer
+ 	webhookProducer    producer_interfaces.Producer
+ 	websocketProducer  producer_interfaces.Producer
+@@ -115,9 +116,9 @@ type MyClient struct {
+ 	messageRepository  message_repository.MessageRepository
+ 	labelRepository    label_repository.LabelRepository
+ 	pollService        poll_service.PollService // NOVO: Serviço de enquetes
+-	clientPointer      map[string]*whatsmeow.Client
+-	myClientPointer    map[string]*MyClient
+-	killChannel        map[string](chan bool)
++	clientPointer      *safemap.Map[*whatsmeow.Client]
++	myClientPointer    *safemap.Map[*MyClient]
++	killChannel        *safemap.Map[chan bool]
+ 	userInfoCache      *cache.Cache
+ 	config             *config.Config
+ 	historySyncID      int32
+@@ -175,7 +176,7 @@ func (w whatsmeowService) ReconnectClient(instanceId string) error {
+ 	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Starting reconnection process - simulating restart", instanceId)
+ 
+ 	// Passo 1: Limpar conexão existente se houver
+-	if client, exists := w.clientPointer[instanceId]; exists {
++	if client, exists := w.clientPointer.Lookup(instanceId); exists {
+ 		w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Disconnecting existing client", instanceId)
+ 
+ 		// Desconectar o cliente WebSocket
+@@ -185,7 +186,7 @@ func (w whatsmeowService) ReconnectClient(instanceId string) error {
+ 		}
+ 
+ 		// Remover event handler se existir
+-		if mycli, ok := w.myClientPointer[instanceId]; ok {
++		if mycli, ok := w.myClientPointer.Lookup(instanceId); ok {
+ 			if mycli.eventHandlerID != 0 {
+ 				client.RemoveEventHandler(mycli.eventHandlerID)
+ 				w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Event handler removed", instanceId)
+@@ -197,7 +198,7 @@ func (w whatsmeowService) ReconnectClient(instanceId string) error {
+ 	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Cleaning up resources", instanceId)
+ 
+ 	// Enviar sinal de kill se o canal existir
+-	if killChan, exists := w.killChannel[instanceId]; exists {
++	if killChan, exists := w.killChannel.Lookup(instanceId); exists {
+ 		select {
+ 		case killChan <- true:
+ 			w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Kill signal sent", instanceId)
+@@ -207,9 +208,9 @@ func (w whatsmeowService) ReconnectClient(instanceId string) error {
+ 	}
+ 
+ 	// Remover das estruturas
+-	delete(w.clientPointer, instanceId)
+-	delete(w.myClientPointer, instanceId)
+-	delete(w.killChannel, instanceId)
++	w.clientPointer.Delete(instanceId)
++	w.myClientPointer.Delete(instanceId)
++	w.killChannel.Delete(instanceId)
+ 
+ 	// Limpar cache de userInfo para esta instância
+ 	if instance, err := w.instanceRepository.GetInstanceByID(instanceId); err == nil {
+@@ -355,8 +356,8 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 	var deviceStore *store.Device
+ 	var err error
+ 
+-	if w.clientPointer[cd.Instance.Id] != nil {
+-		if w.clientPointer[cd.Instance.Id].IsConnected() {
++	if w.clientPointer.Get(cd.Instance.Id) != nil {
++		if w.clientPointer.Get(cd.Instance.Id).IsConnected() {
+ 			return
+ 		}
+ 	}
+@@ -442,7 +443,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 	clientLog := waLog.Stdout("Client", minLevel, true)
+ 	client := whatsmeow.NewClient(deviceStore, clientLog)
+ 
+-	w.clientPointer[cd.Instance.Id] = client
++	w.clientPointer.Set(cd.Instance.Id, client)
+ 
+ 	if cd.IsProxy {
+ 		var proxyConfig ProxyConfig
+@@ -530,7 +531,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 	mycli.eventHandlerID = mycli.WAClient.AddEventHandler(mycli.myEventHandler)
+ 
+ 	// Armazena o MyClient no map para permitir atualizações posteriores
+-	w.myClientPointer[cd.Instance.Id] = mycli
++	w.myClientPointer.Set(cd.Instance.Id, mycli)
+ 
+ 	if client.Store.ID != nil {
+ 		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Already logged in with JID: %s", cd.Instance.Id, client.Store.ID.String())
+@@ -604,12 +605,12 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 
+ 	for {
+ 		select {
+-		case <-w.killChannel[cd.Instance.Id]:
++		case <-w.killChannel.Get(cd.Instance.Id):
+ 			w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("Received kill signal for user '%s'", cd.Instance.Id)
+ 			client.Disconnect()
+ 
+-			delete(w.clientPointer, cd.Instance.Id)
+-			delete(w.myClientPointer, cd.Instance.Id)
++			w.clientPointer.Delete(cd.Instance.Id)
++			w.myClientPointer.Delete(cd.Instance.Id)
+ 
+ 			// Limpar cache de userInfo para esta instância
+ 			w.userInfoCache.Delete(cd.Instance.Token)
+@@ -684,7 +685,7 @@ func schedulePresenceUpdates(mycli *MyClient) {
+ 			randomInterval := time.Duration(1+rand.Intn(3)) * time.Hour
+ 			ticker = time.NewTicker(randomInterval)
+ 
+-		case <-mycli.killChannel[mycli.userID]:
++		case <-mycli.killChannel.Get(mycli.userID):
+ 			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Received kill signal, stopping presence updates", mycli.userID)
+ 			return // Encerra a goroutine quando receber sinal de kill
+ 		}
+@@ -878,7 +879,7 @@ func (mycli *MyClient) teardownQR(reason string, forceLogout bool) {
+ 	// maps (it is the single writer for this instance). Blocking send mirrors
+ 	// the original timeout branch so the signal is never dropped.
+ 	mycli.loggerWrapper.GetLogger(instanceID).LogWarn("[%s] QR timeout — signaling kill channel", instanceID)
+-	if killChan, exists := mycli.killChannel[instanceID]; exists {
++	if killChan, exists := mycli.killChannel.Lookup(instanceID); exists {
+ 		killChan <- true
+ 	}
+ }
+@@ -937,7 +938,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
+ 
+ 			// jid, ok := utils.ParseJID(mycli.WAClient.Store.ID.ToNonAD().User)
+ 			// if ok {
+-			// 	profilePicUrl, err := mycli.clientPointer[mycli.userID].GetProfilePictureInfo(jid, &whatsmeow.GetProfilePictureParams{
++			// 	profilePicUrl, err := mycli.clientPointer.Get(mycli.userID).GetProfilePictureInfo(jid, &whatsmeow.GetProfilePictureParams{
+ 			// 		Preview: false,
+ 			// 	})
+ 			// 	if err != nil {
+@@ -1307,7 +1308,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
+ 				fmt.Printf("[POLL DEBUG] ✅ mycli.WAClient is initialized: %s\n", mycli.WAClient.Store.ID)
+ 			}
+ 
+-			decrypted, err := mycli.clientPointer[mycli.userID].DecryptPollVote(context.Background(), evt)
++			decrypted, err := mycli.clientPointer.Get(mycli.userID).DecryptPollVote(context.Background(), evt)
+ 			if err != nil {
+ 				mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Failed to decrypt vote: %v", mycli.userID, err)
+ 			} else {
+@@ -1948,7 +1949,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
+ 		}
+ 
+ 		// Agora mata o canal DEPOIS de enviar o evento
+-		mycli.killChannel[mycli.userID] <- true
++		mycli.killChannel.Get(mycli.userID) <- true
+ 	case *events.ChatPresence:
+ 		doWebhook = true
+ 		postMap["event"] = "ChatPresence"
+@@ -2433,7 +2434,7 @@ func (w whatsmeowService) StartInstance(instanceId string) error {
+ 		}
+ 	}
+ 
+-	w.killChannel[instance.Id] = make(chan bool)
++	w.killChannel.Set(instance.Id, make(chan bool))
+ 
+ 	clientData := &ClientData{
+ 		Instance:      instance,
+@@ -2734,7 +2735,7 @@ func (w whatsmeowService) UpdateInstanceSettings(instanceId string) error {
+ 	}
+ 
+ 	// Verifica se o MyClient existe
+-	myClient, exists := w.myClientPointer[instanceId]
++	myClient, exists := w.myClientPointer.Lookup(instanceId)
+ 	if !exists {
+ 		w.loggerWrapper.GetLogger(instanceId).LogWarn("[%s] MyClient not found in runtime, instance may not be connected", instanceId)
+ 		return fmt.Errorf("instance %s not found in runtime", instanceId)
+@@ -2793,7 +2794,7 @@ func (w whatsmeowService) UpdateInstanceAdvancedSettings(instanceId string) erro
+ 	}
+ 
+ 	// Verifica se o MyClient existe
+-	myClient, exists := w.myClientPointer[instanceId]
++	myClient, exists := w.myClientPointer.Lookup(instanceId)
+ 	if !exists {
+ 		w.loggerWrapper.GetLogger(instanceId).LogWarn("[%s] MyClient not found in runtime, instance may not be connected", instanceId)
+ 		return fmt.Errorf("instance %s not found in runtime", instanceId)
+@@ -2813,19 +2814,19 @@ func (w whatsmeowService) ClearInstanceCache(instanceId string, token string) er
+ 	w.userInfoCache.Delete(token)
+ 
+ 	// Limpar myClientPointer se existir
+-	if _, exists := w.myClientPointer[instanceId]; exists {
+-		delete(w.myClientPointer, instanceId)
++	if _, exists := w.myClientPointer.Lookup(instanceId); exists {
++		w.myClientPointer.Delete(instanceId)
+ 		w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] MyClient pointer cleared", instanceId)
+ 	}
+ 
+ 	// Limpar clientPointer se existir
+-	if _, exists := w.clientPointer[instanceId]; exists {
+-		delete(w.clientPointer, instanceId)
++	if _, exists := w.clientPointer.Lookup(instanceId); exists {
++		w.clientPointer.Delete(instanceId)
+ 		w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Client pointer cleared", instanceId)
+ 	}
+ 
+ 	// Limpar killChannel se existir
+-	if killChan, exists := w.killChannel[instanceId]; exists {
++	if killChan, exists := w.killChannel.Lookup(instanceId); exists {
+ 		select {
+ 		case killChan <- true:
+ 			// Canal recebeu o sinal
+@@ -2833,7 +2834,7 @@ func (w whatsmeowService) ClearInstanceCache(instanceId string, token string) er
+ 			// Canal pode estar bloqueado, apenas fecha
+ 		}
+ 		close(killChan)
+-		delete(w.killChannel, instanceId)
++		w.killChannel.Delete(instanceId)
+ 		w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Kill channel cleared", instanceId)
+ 	}
+ 
+@@ -2847,8 +2848,8 @@ func NewWhatsmeowService(
+ 	messageRepository message_repository.MessageRepository,
+ 	labelRepository label_repository.LabelRepository,
+ 	config *config.Config,
+-	killChannel map[string](chan bool),
+-	clientPointer map[string]*whatsmeow.Client,
++	killChannel *safemap.Map[chan bool],
++	clientPointer *safemap.Map[*whatsmeow.Client],
+ 	rabbitmqProducer producer_interfaces.Producer,
+ 	webhookProducer producer_interfaces.Producer,
+ 	websocketProducer producer_interfaces.Producer,
+@@ -2871,7 +2872,7 @@ func NewWhatsmeowService(
+ 		killChannel:        killChannel,
+ 		userInfoCache:      cache.New(5*time.Minute, 10*time.Minute),
+ 		clientPointer:      clientPointer,
+-		myClientPointer:    make(map[string]*MyClient),
++		myClientPointer:    safemap.New[*MyClient](),
+ 		rabbitmqProducer:   rabbitmqProducer,
+ 		webhookProducer:    webhookProducer,
+ 		websocketProducer:  websocketProducer,
+@@ -2899,7 +2900,7 @@ func (w *whatsmeowService) PasskeyCeremonyStore() *ceremony.Store {
+ // SubmitPasskeyResponse forwards the browser's WebAuthn assertion to WhatsApp
+ // for the given instance. Called by POST /passkey-ceremony/{token}/response.
+ func (w *whatsmeowService) SubmitPasskeyResponse(instanceId string, resp *types.WebAuthnResponse) error {
+-	client, ok := w.clientPointer[instanceId]
++	client, ok := w.clientPointer.Lookup(instanceId)
+ 	if !ok || client == nil {
+ 		return fmt.Errorf("no active client for instance %s", instanceId)
+ 	}
+@@ -2918,7 +2919,7 @@ func (w *whatsmeowService) SubmitPasskeyResponse(instanceId string, resp *types.
+ // ConfirmPasskey finishes the pairing after the user verified the code.
+ // Called by POST /passkey-ceremony/{token}/confirm.
+ func (w *whatsmeowService) ConfirmPasskey(instanceId string) error {
+-	client, ok := w.clientPointer[instanceId]
++	client, ok := w.clientPointer.Lookup(instanceId)
+ 	if !ok || client == nil {
+ 		return fmt.Errorf("no active client for instance %s", instanceId)
+ 	}
