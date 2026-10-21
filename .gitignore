@@ -1,4 +1,7 @@
 .env
+# Binários compilados (o Dockerfile builda a partir do código-fonte)
+/evolution-go
+/server
 logs/*
 build/
 *.prof

@@ -1,0 +1,100 @@
+# Fork Fintalk do Evolution Go — PRODUÇÃO (Coolify).
+#
+# Diferenças para o docker-compose.yml (local):
+#   - Sem `container_name` fixo: o Coolify gera nomes únicos por deploy.
+#   - Sem `ports:`: quem expõe o Evo Go é o proxy do Coolify (domínio na
+#     porta interna 8080) e o Postgres NÃO é acessível de fora — só pela
+#     rede interna entre os dois serviços.
+#   - Segredos OBRIGATÓRIOS: sem POSTGRES_PASSWORD e GLOBAL_API_KEY definidos
+#     nas Environment Variables do Coolify, o deploy falha de propósito
+#     (nada de cair nas senhas padrão de desenvolvimento).
+#
+# Como usar no Coolify:
+#   1. Add Resource > Docker Compose, repo deste fork, branch `fintalk`,
+#      Docker Compose Location: /docker-compose.coolify.yml
+#   2. Environment Variables:
+#        POSTGRES_PASSWORD=<senha forte>     (openssl rand -hex 24)
+#        GLOBAL_API_KEY=<chave forte>        (openssl rand -hex 32)
+#        WADEBUG=INFO                        (opcional)
+#        CONNECT_ON_STARTUP=false            (opcional)
+#   3. Domínio do serviço `evogo`: https://evogo.seudominio.com:8080
+#      (DNS A do subdomínio apontando para o IP do servidor Coolify)
+#   4. Deploy. Os volumes guardam as sessões do WhatsApp — não apague.
+
+services:
+  evogo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: 0.7.2-fintalk.1
+    image: evolution-go-fintalk:0.7.2.1
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      SERVER_PORT: "8080"
+      CLIENT_NAME: "evolution"
+
+      # Chave global da API (header apikey) — obrigatória via Coolify
+      GLOBAL_API_KEY: "${GLOBAL_API_KEY:?Defina GLOBAL_API_KEY nas Environment Variables do Coolify}"
+
+      # Bancos do Evo Go (host "postgres" = serviço ao lado neste compose)
+      POSTGRES_AUTH_DB: "postgresql://postgres:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD nas Environment Variables do Coolify}@postgres:5432/evogo_auth?sslmode=disable"
+      POSTGRES_USERS_DB: "postgresql://postgres:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD nas Environment Variables do Coolify}@postgres:5432/evogo_users?sslmode=disable"
+      DATABASE_SAVE_MESSAGES: "false"
+
+      WADEBUG: "${WADEBUG:-INFO}"
+      LOGTYPE: "console"
+
+      # Não subir instâncias sem pareamento no boot (evita o loop de QR que
+      # amplificava o vazamento de conexões — ver PATCHES.md).
+      CONNECT_ON_STARTUP: "${CONNECT_ON_STARTUP:-false}"
+      WEBHOOK_FILES: "true"
+
+      AMQP_GLOBAL_ENABLED: "false"
+      NATS_GLOBAL_ENABLED: "false"
+      MINIO_ENABLED: "false"
+      EVENT_IGNORE_STATUS: "true"
+      QRCODE_MAX_COUNT: "5"
+    volumes:
+      - evogo_data:/app/dbdata
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - evogo_net
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Sem `ports:` de propósito: o banco só é acessível dentro de evogo_net.
+    # max_connections maior que o padrão (100) como margem; a correção de
+    # verdade é o patch do pool (patches/001). idle_session_timeout é rede de
+    # segurança: recicla qualquer conexão idle esquecida.
+    command: >-
+      postgres
+      -c max_connections=300
+      -c idle_session_timeout=300000
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD nas Environment Variables do Coolify}"
+      POSTGRES_DB: postgres
+    volumes:
+      - evogo_pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - evogo_net
+
+volumes:
+  evogo_data:
+  evogo_pgdata:
+
+networks:
+  evogo_net:
+    driver: bridge
