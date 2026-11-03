@@ -27,8 +27,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: 0.7.2-fintalk.1
-    image: evolution-go-fintalk:0.7.2.1
+        VERSION: 0.7.2-fintalk.2
+    image: evolution-go-fintalk:0.7.2.2
     restart: unless-stopped
     expose:
       - "8080"

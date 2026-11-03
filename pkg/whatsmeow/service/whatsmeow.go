@@ -1,19 +1,17 @@
 package whatsmeow_service
 
 import (
-	"github.com/evolution-foundation/evolution-go/pkg/safemap"
 	"bytes"
 	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/evolution-foundation/evolution-go/pkg/safemap"
 	"image/png"
-	"io"
 	"math/rand"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -421,16 +419,31 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
 		}
 	} else {
-		// Try to fetch version from WhatsApp Web
+		// Tenta a revisão atual do WhatsApp Web, mas NUNCA rebaixa a versão
+		// padrão embutida no whatsmeow: o WhatsApp rejeita com 405
+		// "Client outdated" antes de gerar o QR.
 		webVersion, err := fetchWhatsAppWebVersion()
 		if err != nil {
-			w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to fetch WhatsApp Web version: %v", cd.Instance.Id, err)
-		} else {
-			w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Setting whatsapp version from web to %d.%d.%d", cd.Instance.Id, webVersion.Major, webVersion.Minor, webVersion.Patch)
-			version = *webVersion
-			store.DeviceProps.Version.Primary = proto.Uint32(uint32(version.Major))
-			store.DeviceProps.Version.Secondary = proto.Uint32(uint32(version.Minor))
-			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
+			w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to fetch WhatsApp Web version (using minimum 2.3000.%d): %v", cd.Instance.Id, versaoMinimaWhatsApp, err)
+		}
+		if webVersion != nil {
+			atual := clientVersion{}
+			if store.DeviceProps.Version != nil {
+				atual = clientVersion{
+					Major: int(store.DeviceProps.Version.GetPrimary()),
+					Minor: int(store.DeviceProps.Version.GetSecondary()),
+					Patch: int(store.DeviceProps.Version.GetTertiary()),
+				}
+			}
+			if versaoWhatsAppMaisNova(*webVersion, atual) {
+				w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Setting whatsapp version to %d.%d.%d (whatsmeow default %d.%d.%d)", cd.Instance.Id, webVersion.Major, webVersion.Minor, webVersion.Patch, atual.Major, atual.Minor, atual.Patch)
+				version = *webVersion
+				store.DeviceProps.Version.Primary = proto.Uint32(uint32(version.Major))
+				store.DeviceProps.Version.Secondary = proto.Uint32(uint32(version.Minor))
+				store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
+			} else {
+				w.loggerWrapper.GetLogger(cd.Instance.Id).LogWarn("[%s] WhatsApp Web revision %d.%d.%d is not newer than whatsmeow default %d.%d.%d; keeping default", cd.Instance.Id, webVersion.Major, webVersion.Minor, webVersion.Patch, atual.Major, atual.Minor, atual.Patch)
+			}
 		}
 	}
 
@@ -2662,6 +2675,18 @@ var (
 	webVersionCacheTTL = 1 * time.Hour
 )
 
+func versaoWhatsAppMaisNova(candidata, atual clientVersion) bool {
+	if candidata.Major != atual.Major {
+		return candidata.Major > atual.Major
+	}
+	if candidata.Minor != atual.Minor {
+		return candidata.Minor > atual.Minor
+	}
+	return candidata.Patch > atual.Patch
+}
+
+const versaoMinimaWhatsApp = 1052889962 // revisão aceita em 03/11/2026
+
 func fetchWhatsAppWebVersion() (*clientVersion, error) {
 	cachedWebVersionMu.Lock()
 	defer cachedWebVersionMu.Unlock()
@@ -2670,58 +2695,35 @@ func fetchWhatsAppWebVersion() (*clientVersion, error) {
 		return cachedWebVersion, nil
 	}
 
-	resp, err := http.Get("https://web.whatsapp.com/sw.js")
+	// Usa o resolvedor do próprio whatsmeow (busca a página atual do WhatsApp
+	// Web com headers de navegador), em vez de raspar o sw.js — que pode vir de
+	// cache de CDN antigo.
+	httpClient := &http.Client{Timeout: 20 * time.Second}
+	latest, err := whatsmeow.GetLatestVersion(context.Background(), httpClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch WhatsApp Web version: %v", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	content := string(body)
-
-	// Múltiplas estratégias para encontrar client_revision
-	patterns := []string{
-		`"client_revision":\s*(\d+)`,              // Formato direto
-		`\\"client_revision\\":\s*(\d+)`,          // Formato escaped
-		`client_revision\\?\\"?:[\s]*(\d+)`,       // Formato mais flexível
-		`["']client_revision["'][\s]*:[\s]*(\d+)`, // Com aspas variadas
+		// Sem rede/cache quebrado, usa a mínima conhecida em vez de deixar a
+		// versão padrão do whatsmeow (0.1.0), que o WhatsApp rejeita.
+		minima := &clientVersion{Major: 2, Minor: 3000, Patch: versaoMinimaWhatsApp}
+		cachedWebVersion = minima
+		cachedWebVersionAt = time.Now()
+		return minima, fmt.Errorf("failed to fetch WhatsApp Web version: %v", err)
 	}
 
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		matches := re.FindStringSubmatch(content)
-
-		if len(matches) >= 2 {
-			clientRevision, err := strconv.Atoi(matches[1])
-			if err != nil {
-				continue // Tenta próximo padrão
-			}
-
-			// Log qual padrão funcionou
-			if clientRevision > 0 {
-				cachedWebVersion = &clientVersion{
-					Major: 2,
-					Minor: 3000,
-					Patch: clientRevision,
-				}
-				cachedWebVersionAt = time.Now()
-				return cachedWebVersion, nil
-			}
-		}
+	encontrada := clientVersion{
+		Major: int(latest[0]),
+		Minor: int(latest[1]),
+		Patch: int(latest[2]),
+	}
+	// Nunca aceita uma revisão anterior à que já sabemos ser aceita: se o
+	// WhatsApp Web devolver algo velho por cache, mantém a mínima conhecida.
+	minima := clientVersion{Major: 2, Minor: 3000, Patch: versaoMinimaWhatsApp}
+	if versaoWhatsAppMaisNova(minima, encontrada) {
+		encontrada = minima
 	}
 
-	// Se chegou aqui, nenhum padrão funcionou - log do conteúdo para debug
-	// Mostra apenas uma parte para não logar muito
-	previewLength := 500
-	if len(content) > previewLength {
-		content = content[:previewLength] + "..."
-	}
-
-	return nil, fmt.Errorf("could not find client revision in the fetched content. Content preview: %s", content)
+	cachedWebVersion = &encontrada
+	cachedWebVersionAt = time.Now()
+	return cachedWebVersion, nil
 }
 
 func (w whatsmeowService) UpdateInstanceSettings(instanceId string) error {

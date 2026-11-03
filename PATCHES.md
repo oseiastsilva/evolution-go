@@ -80,6 +80,31 @@ se o upstream incorporar a mesma correção.
 - **Quando descartar:** quando uma release oficial parar de reescrever o
   número dessa forma (verificar `formatBRNumber` em `pkg/utils/utils.go`).
 
+## 005 — Atualização do whatsmeow + versão do WhatsApp nunca regride
+
+- **Arquivo do patch:** `patches/005-whatsmeow-2026-11-02.patch`
+- **Origem:** atualização manual da dependência (ver README-FINTALK, seção
+  "Atualizar só o whatsmeow").
+- **Problema:** o whatsmeow de 2026-06-30 anunciava `2.3000.1042386815` e o
+  WhatsApp passou a responder `Client outdated (405)` antes de gerar o QR.
+  Além disso, `fetchWhatsAppWebVersion` sempre sobrescrevia a versão padrão da
+  biblioteca com o `client_revision` do `sw.js` — que pode vir de cache de CDN
+  antigo — rebaixando a versão mesmo com whatsmeow novo.
+- **Correção:**
+  - `go.mau.fi/whatsmeow` → `v0.0.0-20261102152715-54038813c47f` (02/11/2026).
+  - Ajustes de API em `pkg/user/service/user_service.go`
+    (`UpdateBlocklist`/`GetBlocklist` com `dhash` e `SetStatusMessage` com
+    `types.SetStatusInput`).
+  - `StartClient` só usa a revisão do `sw.js` se ela for **mais nova** que a
+    padrão do whatsmeow (`versaoWhatsAppMaisNova`).
+  - `fetchWhatsAppWebVersion` passou a usar `whatsmeow.GetLatestVersion`
+    (página atual do WhatsApp Web, com headers de navegador) e tem piso em
+    `versaoMinimaWhatsApp` para não aceitar revisão velha de cache.
+  - Go 1.26+ (`Dockerfile` com `golang:1.27.3-alpine`) e imagem
+    `evolution-go-fintalk:0.7.2.2` para forçar rebuild no Coolify.
+- **Quando descartar:** quando o upstream atualizar o whatsmeow e corrigir a
+  lógica de versão (verificar `fetchWhatsAppWebVersion` e `StartClient`).
+
 ## Como adicionar um patch novo
 
 1. Faça a alteração em commit próprio, com mensagem `fix(escopo): descrição`.
