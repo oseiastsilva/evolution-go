@@ -125,7 +125,7 @@ func (s *sendHandler) SendLink(ctx *gin.Context) {
 
 // Send a media message
 // @Summary Send a media message
-// @Description Send a media message
+// @Description Send image, video, audio (PTT/voice note with real waveform) or document via URL or multipart file
 // @Tags Send Message
 // @Accept json
 // @Produce json

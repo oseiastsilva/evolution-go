@@ -5106,6 +5106,11 @@ const docTemplate = `{
                 },
                 "url": {
                     "type": "string"
+                },
+                "waveform": {
+                    "description": "Optional for type=audio. Base64 of 64 samples (0-100). If omitted, the server generates a real waveform from the audio amplitude.",
+                    "type": "string",
+                    "format": "byte"
                 }
             }
         },

@@ -119,8 +119,8 @@ type MediaStruct struct {
 	FormatJid       *bool        `json:"formatJid,omitempty"`
 	Quoted          QuotedStruct `json:"quoted"`
 	ForwardingScore *uint32      `json:"forwardingScore,omitempty"`
-	// Waveform: 64 amostras 0–100 (JSON: base64 dos 64 bytes). Se omitido, o servidor gera a partir do áudio.
-	Waveform []byte `json:"waveform,omitempty"`
+	// Waveform optional for type=audio: base64 of 64 samples (0-100). If omitted, server generates from audio.
+	Waveform []byte `json:"waveform,omitempty" example:"OjAnExISDgsKCAkJBwgkHAQEBBEFAwMNAxAcKCgkFzM0QUE4Jh4eKAoKChcLCwkeFgkJCQo3JiQmIiIRPz8/Ow=="`
 }
 
 type PollStruct struct {

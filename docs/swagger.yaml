@@ -758,6 +758,11 @@ definitions:
         type: string
       url:
         type: string
+      waveform:
+        description: Optional for type=audio. Base64 of 64 samples (0-100). If omitted,
+          the server generates a real waveform from the audio amplitude.
+        type: string
+        format: byte
     type: object
   github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.PollStruct:
     properties:

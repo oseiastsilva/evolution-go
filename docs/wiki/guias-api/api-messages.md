@@ -204,6 +204,7 @@ delay: 0
 | `file` | binary | ✅ Sim (arquivo) | Arquivo binário (se não enviar URL) |
 | `caption` | string | ❌ Não | Legenda da mídia |
 | `filename` | string | ❌ Não | Nome do arquivo |
+| `waveform` | string (base64) | ❌ Não | Só para `type=audio`: 64 amostras (0–100) em base64. Se omitido, o servidor gera a partir do áudio |
 
 **Tipos de Mídia Aceitos**:
 
@@ -211,10 +212,12 @@ delay: 0
 |------|------------------|-------------|
 | `image` | JPG, PNG, WebP | WebP convertido para JPEG |
 | `video` | MP4 | Apenas MP4 |
-| `audio` | Qualquer | Convertido para Opus (PTT) automaticamente |
+| `audio` | Qualquer | Convertido para Opus (PTT) automaticamente; waveform real gerado no servidor |
 | `document` | Qualquer | Qualquer tipo de arquivo |
 
-**Áudio**: O sistema converte automaticamente qualquer formato de áudio para **Opus** (formato PTT do WhatsApp). Pode usar conversor local (ffmpeg) ou API externa (configurável via `API_AUDIO_CONVERTER`).
+**Áudio (nota de voz / PTT)**: O sistema converte automaticamente qualquer formato para **Ogg/Opus mono ~48 kHz** (`audio/ogg; codecs=opus`), com `PTT: true` e duração (`Seconds`) real. Pode usar conversor local (ffmpeg) ou API externa (`API_AUDIO_CONVERTER`).
+
+**Waveform**: Por padrão o servidor calcula 64 amostras (valores 0–100) a partir da amplitude do áudio (decode PCM via ffmpeg), para as ondas do player no WhatsApp acompanharem a fala. Opcionalmente envie `waveform` (JSON ou form-data) como base64 desses 64 bytes; se o valor for inválido (tamanho ≠ 64), a geração automática é usada.
 
 **Resposta de Sucesso (200)**:
 ```json
@@ -257,6 +260,28 @@ curl -X POST http://localhost:4000/send/media \
   -F "type=image" \
   -F "caption=Foto enviada" \
   -F "file=@/caminho/para/imagem.jpg"
+```
+
+**Exemplo cURL (Áudio / nota de voz)**:
+```bash
+curl -X POST http://localhost:4000/send/media \
+  -H "Content-Type: application/json" \
+  -H "apikey: SUA-CHAVE-API" \
+  -d '{
+    "number": "5511999999999",
+    "url": "https://exemplo.com/audio.mp3",
+    "type": "audio"
+  }'
+```
+
+Opcionalmente, envie `waveform` (base64 de exatamente 64 bytes, cada valor 0–100) para sobrescrever a geração automática:
+```bash
+curl -X POST http://localhost:4000/send/media \
+  -H "apikey: SUA-CHAVE-API" \
+  -F "number=5511999999999" \
+  -F "type=audio" \
+  -F "file=@/caminho/para/audio.ogg" \
+  -F "waveform=<base64-de-64-bytes>"
 ```
 
 ---
