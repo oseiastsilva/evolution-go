@@ -6,6 +6,7 @@ import (
 	"context"
 	crypto_rand "crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -118,6 +119,8 @@ type MediaStruct struct {
 	FormatJid       *bool        `json:"formatJid,omitempty"`
 	Quoted          QuotedStruct `json:"quoted"`
 	ForwardingScore *uint32      `json:"forwardingScore,omitempty"`
+	// Waveform: 64 amostras 0–100 (JSON: base64 dos 64 bytes). Se omitido, o servidor gera a partir do áudio.
+	Waveform []byte `json:"waveform,omitempty"`
 }
 
 type PollStruct struct {
@@ -944,6 +947,91 @@ func convertAudioToOpusWithDuration(inputData []byte) ([]byte, int, error) {
 	return convertedData, duration, nil
 }
 
+const audioWaveformSamples = 64
+
+// normalizeWaveform valida 64 amostras e limita cada valor a 0–100.
+func normalizeWaveform(w []byte) []byte {
+	if len(w) != audioWaveformSamples {
+		return nil
+	}
+	out := make([]byte, audioWaveformSamples)
+	for i, v := range w {
+		if v > 100 {
+			out[i] = 100
+		} else {
+			out[i] = v
+		}
+	}
+	return out
+}
+
+// waveformFromPCM gera 64 amostras 0–100 a partir de PCM s16le mono (peak por bucket).
+func waveformFromPCM(pcm []byte, samples int) []byte {
+	out := make([]byte, samples)
+	if len(pcm) < 2 || samples <= 0 {
+		return out
+	}
+	total := len(pcm) / 2
+	for i := 0; i < samples; i++ {
+		start := i * total / samples
+		end := (i + 1) * total / samples
+		if end <= start {
+			end = start + 1
+		}
+		if end > total {
+			end = total
+		}
+		peak := 0
+		for j := start; j < end; j++ {
+			v := int(int16(binary.LittleEndian.Uint16(pcm[j*2 : j*2+2])))
+			if v < 0 {
+				v = -v
+			}
+			if v > peak {
+				peak = v
+			}
+		}
+		out[i] = byte(peak * 100 / 32767)
+	}
+	return out
+}
+
+// generateAudioWaveform decodifica o áudio com ffmpeg e calcula waveform real.
+func generateAudioWaveform(audioData []byte) ([]byte, error) {
+	cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error",
+		"-i", "pipe:0",
+		"-f", "s16le",
+		"-ac", "1",
+		"-ar", "16000",
+		"-acodec", "pcm_s16le",
+		"pipe:1",
+	)
+
+	var outBuffer bytes.Buffer
+	var errBuffer bytes.Buffer
+	cmd.Stdin = bytes.NewReader(audioData)
+	cmd.Stdout = &outBuffer
+	cmd.Stderr = &errBuffer
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("waveform decode failed: %v, details: %s", err, errBuffer.String())
+	}
+
+	return waveformFromPCM(outBuffer.Bytes(), audioWaveformSamples), nil
+}
+
+// resolveAudioWaveform usa o waveform do cliente se válido; senão gera a partir do áudio.
+func resolveAudioWaveform(clientWaveform, audioData []byte) []byte {
+	if w := normalizeWaveform(clientWaveform); w != nil {
+		return w
+	}
+	w, err := generateAudioWaveform(audioData)
+	if err != nil || w == nil {
+		return nil
+	}
+	return w
+}
+
 func (s *sendService) SendMediaFile(data *MediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	return s.sendMediaFileWithRetry(data, fileData, instance, 3)
 }
@@ -1115,6 +1203,7 @@ func (s *sendService) sendMediaFileWithRetry(data *MediaStruct, fileData []byte,
 			}
 			mediaType = "PtvMessage"
 		case "audio":
+			waveform := resolveAudioWaveform(data.Waveform, fileData)
 			if isNewsletter {
 				media = &waE2E.Message{AudioMessage: &waE2E.AudioMessage{
 					URL:        &uploaded.URL,
@@ -1124,6 +1213,7 @@ func (s *sendService) sendMediaFileWithRetry(data *MediaStruct, fileData []byte,
 					FileSHA256: uploaded.FileSHA256,
 					FileLength: &uploaded.FileLength,
 					Seconds:    proto.Uint32(uint32(duration)),
+					Waveform:   waveform,
 				}}
 			} else {
 				media = &waE2E.Message{AudioMessage: &waE2E.AudioMessage{
@@ -1136,6 +1226,7 @@ func (s *sendService) sendMediaFileWithRetry(data *MediaStruct, fileData []byte,
 					FileSHA256:    uploaded.FileSHA256,
 					FileLength:    proto.Uint64(uploaded.FileLength),
 					Seconds:       proto.Uint32(uint32(duration)),
+					Waveform:      waveform,
 				}}
 			}
 			mediaType = "AudioMessage"
@@ -1415,31 +1506,30 @@ func (s *sendService) sendMediaUrlWithRetry(data *MediaStruct, instance *instanc
 			}
 			mediaType = "PtvMessage"
 		case "audio":
+			waveform := resolveAudioWaveform(data.Waveform, fileData)
 			if isNewsletter {
 				media = &waE2E.Message{AudioMessage: &waE2E.AudioMessage{
-					URL:              &uploaded.URL,
-					PTT:              proto.Bool(true),
-					DirectPath:       &uploaded.DirectPath,
-					Mimetype:         proto.String(mimeType),
-					FileSHA256:       uploaded.FileSHA256,
-					FileLength:       &uploaded.FileLength,
-					StreamingSidecar: []byte(*proto.String("QpmXDsU7YLagdg==")),
-					Waveform:         []byte(*proto.String("OjAnExISDgsKCAkJBwgkHAQEBBEFAwMNAxAcKCgkFzM0QUE4Jh4eKAoKChcLCwkeFgkJCQo3JiQmIiIRPz8/Ow==")),
-					Seconds:          proto.Uint32(uint32(duration)),
+					URL:        &uploaded.URL,
+					PTT:        proto.Bool(true),
+					DirectPath: &uploaded.DirectPath,
+					Mimetype:   proto.String(mimeType),
+					FileSHA256: uploaded.FileSHA256,
+					FileLength: &uploaded.FileLength,
+					Seconds:    proto.Uint32(uint32(duration)),
+					Waveform:   waveform,
 				}}
 			} else {
 				media = &waE2E.Message{AudioMessage: &waE2E.AudioMessage{
-					URL:              proto.String(uploaded.URL),
-					PTT:              proto.Bool(true),
-					DirectPath:       proto.String(uploaded.DirectPath),
-					MediaKey:         uploaded.MediaKey,
-					Mimetype:         proto.String(mimeType),
-					FileEncSHA256:    uploaded.FileEncSHA256,
-					FileSHA256:       uploaded.FileSHA256,
-					FileLength:       proto.Uint64(uploaded.FileLength),
-					StreamingSidecar: []byte(*proto.String("QpmXDsU7YLagdg==")),
-					Waveform:         []byte(*proto.String("OjAnExISDgsKCAkJBwgkHAQEBBEFAwMNAxAcKCgkFzM0QUE4Jh4eKAoKChcLCwkeFgkJCQo3JiQmIiIRPz8/Ow==")),
-					Seconds:          proto.Uint32(uint32(duration)),
+					URL:           proto.String(uploaded.URL),
+					PTT:           proto.Bool(true),
+					DirectPath:    proto.String(uploaded.DirectPath),
+					MediaKey:      uploaded.MediaKey,
+					Mimetype:      proto.String(mimeType),
+					FileEncSHA256: uploaded.FileEncSHA256,
+					FileSHA256:    uploaded.FileSHA256,
+					FileLength:    proto.Uint64(uploaded.FileLength),
+					Seconds:       proto.Uint32(uint32(duration)),
+					Waveform:      waveform,
 				}}
 			}
 			mediaType = "AudioMessage"

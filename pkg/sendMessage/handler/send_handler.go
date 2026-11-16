@@ -212,6 +212,14 @@ func (s *sendHandler) SendMedia(ctx *gin.Context) {
 			return
 		}
 
+		var waveform []byte
+		if wf := ctx.PostForm("waveform"); wf != "" {
+			decoded, err := base64.StdEncoding.DecodeString(wf)
+			if err == nil && len(decoded) == 64 {
+				waveform = decoded
+			}
+		}
+
 		// Create MediaStruct
 		data = &send_service.MediaStruct{
 			Number:       number,
@@ -223,6 +231,7 @@ func (s *sendHandler) SendMedia(ctx *gin.Context) {
 			MentionAll:   mentionAll,
 			MentionedJID: mentionedJID,
 			Quoted:       quoted,
+			Waveform:     waveform,
 		}
 
 		// Pass fileBytes to the send service
