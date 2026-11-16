@@ -50,7 +50,7 @@ services:
       # Não subir instâncias sem pareamento no boot (evita o loop de QR que
       # amplificava o vazamento de conexões — ver PATCHES.md).
       CONNECT_ON_STARTUP: "${CONNECT_ON_STARTUP:-false}"
-      WEBHOOK_FILES: "true"
+      WEBHOOK_FILES: "false"
 
       AMQP_GLOBAL_ENABLED: "false"
       NATS_GLOBAL_ENABLED: "false"
