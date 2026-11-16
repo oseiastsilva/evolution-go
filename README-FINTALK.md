@@ -4,8 +4,9 @@ Esta pasta é um **fork do Evolution Go** para uso/estudo do Fintalk, mantido o
 mais próximo possível do projeto oficial, com correções próprias pequenas e
 documentadas por cima.
 
-- **Base:** tag oficial `0.7.2` do `evolution-foundation/evolution-go`
-- **Branch local:** `fintalk` (= `0.7.2` + patches + arquivos desta pasta)
+- **Versão (rótulo):** `0.7.3` (arquivo `VERSION` / imagem Docker)
+- **Base git:** tag oficial `0.7.2` + patches Fintalk (paridade nos pontos críticos do 0.7.3; ver `PATCHES.md`)
+- **Branch local:** `fintalk`
 - **Remotos:** `upstream` → repositório oficial. Quando você criar o seu fork
   no GitHub, adicione-o como `origin` (ver abaixo) para publicar seu trabalho.
 

@@ -1,6 +1,8 @@
 # Patches locais deste fork
 
-Base: **tag oficial `0.7.2`** (`9337afc`) do `evolution-foundation/evolution-go`.
+Rótulo de versão: **`0.7.3`** (`VERSION` / imagens `evolution-go-fintalk:0.7.3.x`).
+Base git: tag oficial **`0.7.2`** (`9337afc`) + patches abaixo (paridade funcional
+nos pontos críticos do 0.7.3 oficial, sem merge completo da release).
 Cada patch é um commit separado na branch `fintalk`, para poder ser reaplicado
 (cherry-pick/rebase) quando uma versão nova oficial for adotada — ou descartado
 se o upstream incorporar a mesma correção.
@@ -9,8 +11,8 @@ se o upstream incorporar a mesma correção.
 
 - **Arquivo do patch:** `patches/001-shared-sqlstore-pool.patch`
 - **Origem:** PR [#102](https://github.com/evolution-foundation/evolution-go/pull/102)
-  (Ay0rus), mesma correção do PR [#117](https://github.com/evolution-foundation/evolution-go/pull/117)
-  (guilhermeCassettari, rebaseado para a `develop`).
+  / [#117](https://github.com/evolution-foundation/evolution-go/pull/117); alinhado
+  ao `getAuthContainer` da release oficial **0.7.3**.
 - **Issues:** [#106](https://github.com/evolution-foundation/evolution-go/issues/106),
   [#109](https://github.com/evolution-foundation/evolution-go/issues/109),
   [#112](https://github.com/evolution-foundation/evolution-go/issues/112),
@@ -19,14 +21,13 @@ se o upstream incorporar a mesma correção.
   criando um `*sql.DB` novo (sem limite, sem expiração) que nunca era fechado.
   Cada reconnect vazava um pool; o Postgres enchia de conexões `idle` no
   `evogo_auth` até retornar `FATAL: sorry, too many clients already`.
-- **Correção:** um único `sqlstore.Container` compartilhado, criado uma vez
-  (`sync.Once`) via `sqlstore.NewWithDB`, com pool limitado
-  (Postgres: 20 abertas / 5 idle / lifetime 5min / idle 2min; SQLite: 1).
-- **Diferença para o PR #117:** o #117 substitui o `sync.Once` por um mutex que
-  só memoriza sucesso (se o Postgres falhar na primeira tentativa, tenta de novo
-  na próxima). Se um dia portarmos o #117, atualizar este arquivo.
-- **Quando descartar:** quando uma release oficial trouxer a correção (verificar
-  se `StartClient` ainda chama `sqlstore.New` por cliente no `whatsmeow.go`).
+- **Correção:** um único `sqlstore.Container` compartilhado via mutex (só memoriza
+  sucesso — falha tenta de novo no próximo `StartClient`). Postgres reusa o pool
+  que o `main.go` já abriu e capou (`w.authDB` / 25 open / 5 idle); SQLite abre
+  um DB próprio com `MaxOpenConns(1)`. `Upgrade` com timeout de 60s para não
+  travar todos os connects atrás de um Postgres “zumbi”.
+- **Quando descartar:** quando a base do fork for a release oficial ≥ 0.7.3
+  (já traz o mesmo `getAuthContainer`).
 
 ## 002 — Panic no evento Archive (derruba o processo)
 
@@ -101,7 +102,7 @@ se o upstream incorporar a mesma correção.
     (página atual do WhatsApp Web, com headers de navegador) e tem piso em
     `versaoMinimaWhatsApp` para não aceitar revisão velha de cache.
   - Go 1.26+ (`Dockerfile` com `golang:1.27.3-alpine`) e imagem
-    `evolution-go-fintalk:0.7.2.2` para forçar rebuild no Coolify.
+    `evolution-go-fintalk:0.7.3.1` para forçar rebuild no Coolify.
 - **Quando descartar:** quando o upstream atualizar o whatsmeow e corrigir a
   lógica de versão (verificar `fetchWhatsAppWebVersion` e `StartClient`).
 

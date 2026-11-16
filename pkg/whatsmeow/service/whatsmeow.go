@@ -300,51 +300,60 @@ func (w whatsmeowService) ForceUpdateJid(instanceId string, number string) error
 	return nil
 }
 
-// --- PATCH leak-fix (#269): container/pool UNICO e capado pro store do whatsmeow ---
-// Antes, cada StartClient (conectar E cada reconexao) chamava sqlstore.New(), abrindo
-// um *sql.DB novo sem cap e nunca fechado -> leak que saturava o Postgres do evogo_auth.
-// Agora e um container compartilhado, criado uma vez, com pool limitado e conexao direta.
+// Shared by every StartClient: a container per call opens a pool that is never
+// closed. Only success is memoized, so a failed creation is retried next call.
 var (
-	sharedAuthContainer     *sqlstore.Container
-	sharedAuthContainerErr  error
-	sharedAuthContainerOnce sync.Once
+	sharedAuthContainer   *sqlstore.Container
+	sharedAuthContainerMu sync.Mutex
 )
 
 func (w whatsmeowService) getAuthContainer() (*sqlstore.Container, error) {
-	sharedAuthContainerOnce.Do(func() {
-		var dbLog waLog.Logger
-		if w.config.WaDebug != "" {
-			dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+	sharedAuthContainerMu.Lock()
+	defer sharedAuthContainerMu.Unlock()
+
+	if sharedAuthContainer != nil {
+		return sharedAuthContainer, nil
+	}
+
+	var dbLog waLog.Logger
+	if w.config.WaDebug != "" {
+		dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+	}
+
+	var container *sqlstore.Container
+	var ownDB *sql.DB
+
+	if w.config.PostgresAuthDB != "" {
+		// Reuse the pool main.go opened and capped; a second pool on the same
+		// DSN would raise the connection ceiling.
+		if w.authDB == nil {
+			return nil, fmt.Errorf("POSTGRES_AUTH_DB is set but the auth database pool was not initialized")
 		}
-		var dialect, address string
-		if w.config.PostgresAuthDB != "" {
-			dialect, address = "postgres", w.config.PostgresAuthDB
-		} else {
-			dialect = "sqlite"
-			address = fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-		}
-		db, err := sql.Open(dialect, address)
+		container = sqlstore.NewWithDB(w.authDB, "postgres", dbLog)
+	} else {
+		dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
+		db, err := sql.Open("sqlite", dsn)
 		if err != nil {
-			sharedAuthContainerErr = fmt.Errorf("failed to open auth database: %w", err)
-			return
+			return nil, fmt.Errorf("failed to open auth database: %w", err)
 		}
-		if dialect == "postgres" {
-			db.SetMaxOpenConns(20)
-			db.SetMaxIdleConns(5)
-			db.SetConnMaxLifetime(5 * time.Minute)
-			db.SetConnMaxIdleTime(2 * time.Minute)
-		} else {
-			db.SetMaxOpenConns(1)
+		db.SetMaxOpenConns(1)
+		ownDB = db
+		container = sqlstore.NewWithDB(db, "sqlite", dbLog)
+	}
+
+	// Upgrade runs under the mutex: without a deadline, a server that accepts TCP
+	// but never answers would stall every StartClient behind it.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := container.Upgrade(ctx); err != nil {
+		if ownDB != nil {
+			_ = ownDB.Close()
 		}
-		container := sqlstore.NewWithDB(db, dialect, dbLog)
-		if err := container.Upgrade(context.Background()); err != nil {
-			_ = db.Close()
-			sharedAuthContainerErr = fmt.Errorf("failed to upgrade auth database: %w", err)
-			return
-		}
-		sharedAuthContainer = container
-	})
-	return sharedAuthContainer, sharedAuthContainerErr
+		return nil, fmt.Errorf("failed to upgrade auth database: %w", err)
+	}
+
+	sharedAuthContainer = container
+	return container, nil
 }
 
 func (w whatsmeowService) StartClient(cd *ClientData) {
